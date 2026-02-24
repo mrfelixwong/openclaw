@@ -1178,6 +1178,7 @@ export function renderApp(state: AppViewState) {
                 schemaLoading: state.configSchemaLoading,
                 uiHints: state.configUiHints,
                 formMode: state.configFormMode,
+                showModeToggle: true,
                 formValue: state.configForm,
                 originalValue: state.configFormOriginal,
                 searchQuery: state.configSearchQuery,

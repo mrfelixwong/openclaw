@@ -46,6 +46,15 @@
   opacity: 0.8;
 }
 
+.chat-text :where(a.chat-link-tail-blur) {
+  filter: blur(4px);
+  transition: filter 120ms ease-out;
+}
+
+.chat-text :where(a.chat-link-tail-blur:hover, a.chat-link-tail-blur:focus-visible) {
+  filter: blur(0);
+}
+
 .chat-text :where(code) {
   font-family: var(--mono);
   font-size: 0.9em;

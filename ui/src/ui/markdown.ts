@@ -66,6 +66,7 @@ const MARKDOWN_PARSE_LIMIT = 40_000;
 const MARKDOWN_CACHE_LIMIT = 200;
 const MARKDOWN_CACHE_MAX_CHARS = 50_000;
 const markdownCache = new Map<string, string>();
+const TAIL_LINK_BLUR_CLASS = "chat-link-tail-blur";
 
 function getCachedMarkdown(key: string): string | null {
   const cached = markdownCache.get(key);
@@ -104,6 +105,9 @@ function installHooks() {
     }
     node.setAttribute("rel", "noreferrer noopener");
     node.setAttribute("target", "_blank");
+    if (href.toLowerCase().includes("tail")) {
+      node.classList.add(TAIL_LINK_BLUR_CLASS);
+    }
   });
 }
 

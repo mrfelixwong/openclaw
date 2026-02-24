@@ -20,6 +20,7 @@ describe("config view", () => {
     schemaLoading: false,
     uiHints: {},
     formMode: "form" as const,
+    showModeToggle: true,
     formValue: {},
     originalValue: {},
     searchQuery: "",
@@ -141,7 +142,7 @@ describe("config view", () => {
     expect(applyButton?.disabled).toBe(false);
   });
 
-  it("switches mode via the sidebar toggle", () => {
+  it("switches mode via the mode toggle", () => {
     const container = document.createElement("div");
     const onFormModeChange = vi.fn();
     render(
@@ -160,7 +161,7 @@ describe("config view", () => {
     expect(onFormModeChange).toHaveBeenCalledWith("raw");
   });
 
-  it("switches sections from the sidebar", () => {
+  it("switches sections from the top tabs", () => {
     const container = document.createElement("div");
     const onSectionChange = vi.fn();
     render(
@@ -186,7 +187,7 @@ describe("config view", () => {
     expect(onSectionChange).toHaveBeenCalledWith("gateway");
   });
 
-  it("adds section-active class when activeSection is set", () => {
+  it("marks the active section tab as active", () => {
     const container = document.createElement("div");
     render(
       renderConfig({
@@ -202,40 +203,20 @@ describe("config view", () => {
       container,
     );
 
-    const layout = container.querySelector(".config-layout");
-    expect(layout?.classList.contains("config-layout--section-active")).toBe(true);
+    const tab = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Gateway",
+    );
+    expect(tab?.classList.contains("active")).toBe(true);
   });
 
-  it("does not add section-active class when no section is selected", () => {
+  it("marks the root tab as active when no section is selected", () => {
     const container = document.createElement("div");
     render(renderConfig(baseProps()), container);
 
-    const layout = container.querySelector(".config-layout");
-    expect(layout?.classList.contains("config-layout--section-active")).toBe(false);
-  });
-
-  it("renders mobile back button that calls onSectionChange(null)", () => {
-    const container = document.createElement("div");
-    const onSectionChange = vi.fn();
-    render(
-      renderConfig({
-        ...baseProps(),
-        activeSection: "gateway",
-        onSectionChange,
-        schema: {
-          type: "object",
-          properties: {
-            gateway: { type: "object", properties: {} },
-          },
-        },
-      }),
-      container,
+    const tab = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "All Settings",
     );
-
-    const backBtn = container.querySelector(".config-mobile-back");
-    expect(backBtn).not.toBeNull();
-    (backBtn as HTMLElement)?.click();
-    expect(onSectionChange).toHaveBeenCalledWith(null);
+    expect(tab?.classList.contains("active")).toBe(true);
   });
 
   it("wires search input to onSearchChange", () => {

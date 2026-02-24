@@ -3,7 +3,7 @@ import { icons } from "../icons.ts";
 import type { ThemeTransitionContext } from "../theme-transition.ts";
 import type { ThemeMode, ThemeName } from "../theme.ts";
 import type { ConfigUiHints } from "../types.ts";
-import { hintForPath, humanize, schemaType, type JsonSchema } from "./config-form.shared.ts";
+import { humanize, schemaType, type JsonSchema } from "./config-form.shared.ts";
 import { analyzeConfigSchema, renderConfigForm, SECTION_META } from "./config-form.ts";
 
 export type ConfigProps = {
@@ -20,6 +20,7 @@ export type ConfigProps = {
   schemaLoading: boolean;
   uiHints: ConfigUiHints;
   formMode: "form" | "raw";
+  showModeToggle?: boolean;
   formValue: Record<string, unknown> | null;
   originalValue: Record<string, unknown> | null;
   searchQuery: string;
@@ -371,17 +372,6 @@ const SECTION_CATEGORIES: SectionCategory[] = [
 // Flat lookup: all categorised keys
 const CATEGORISED_KEYS = new Set(SECTION_CATEGORIES.flatMap((c) => c.sections.map((s) => s.key)));
 
-const collapsedCategories = new Set<string>();
-
-type SubsectionEntry = {
-  key: string;
-  label: string;
-  description?: string;
-  order: number;
-};
-
-const ALL_SUBSECTION = "__all__";
-
 function getSectionIcon(key: string) {
   return sidebarIcons[key as keyof typeof sidebarIcons] ?? sidebarIcons.default;
 }
@@ -447,26 +437,6 @@ function resolveSectionMeta(
     label: schema?.title ?? humanize(key),
     description: schema?.description ?? "",
   };
-}
-
-function resolveSubsections(params: {
-  key: string;
-  schema: JsonSchema | undefined;
-  uiHints: ConfigUiHints;
-}): SubsectionEntry[] {
-  const { key, schema, uiHints } = params;
-  if (!schema || schemaType(schema) !== "object" || !schema.properties) {
-    return [];
-  }
-  const entries = Object.entries(schema.properties).map(([subKey, node]) => {
-    const hint = hintForPath([key, subKey], uiHints);
-    const label = hint?.label ?? node.title ?? humanize(subKey);
-    const description = hint?.help ?? node.description ?? "";
-    const order = hint?.order ?? 50;
-    return { key: subKey, label, description, order };
-  });
-  entries.sort((a, b) => (a.order !== b.order ? a.order - b.order : a.key.localeCompare(b.key)));
-  return entries;
 }
 
 function computeDiff(
@@ -675,10 +645,11 @@ function renderAppearanceSection(props: ConfigProps) {
 }
 
 let rawRevealed = false;
-let sidebarCollapsed = false;
 let validityDismissed = false;
 
 export function renderConfig(props: ConfigProps) {
+  const showModeToggle = props.showModeToggle ?? false;
+  const formMode = showModeToggle ? props.formMode : "form";
   const validity = props.valid == null ? "unknown" : props.valid ? "valid" : "invalid";
   const includeVirtualSections = props.includeVirtualSections ?? true;
   const include = props.includeSections?.length ? new Set(props.includeSections) : null;
@@ -724,230 +695,56 @@ export function renderConfig(props: ConfigProps) {
     props.activeSection && !isVirtualSection
       ? resolveSectionMeta(props.activeSection, activeSectionSchema)
       : null;
-  const subsections = props.activeSection
-    ? resolveSubsections({
-        key: props.activeSection,
-        schema: activeSectionSchema,
-        uiHints: props.uiHints,
-      })
-    : [];
-  const allowSubnav =
-    props.formMode === "form" && Boolean(props.activeSection) && subsections.length > 0;
-  const isAllSubsection = props.activeSubsection === ALL_SUBSECTION;
-  const effectiveSubsection = props.searchQuery
-    ? null
-    : isAllSubsection
-      ? null
-      : (props.activeSubsection ?? subsections[0]?.key ?? null);
+  // Config subsections are always rendered as a single page per section.
+  const effectiveSubsection = null;
+
+  const topTabs = [
+    { key: null as string | null, label: props.navRootLabel ?? "Settings" },
+    ...[...visibleCategories, ...(otherCategory ? [otherCategory] : [])].flatMap((cat) =>
+      cat.sections.map((s) => ({ key: s.key, label: s.label })),
+    ),
+  ];
 
   // Compute diff for showing changes (works for both form and raw modes)
-  const diff = props.formMode === "form" ? computeDiff(props.originalValue, props.formValue) : [];
-  const hasRawChanges = props.formMode === "raw" && props.raw !== props.originalRaw;
-  const hasChanges = props.formMode === "form" ? diff.length > 0 : hasRawChanges;
+  const diff = formMode === "form" ? computeDiff(props.originalValue, props.formValue) : [];
+  const hasRawChanges = formMode === "raw" && props.raw !== props.originalRaw;
+  const hasChanges = formMode === "form" ? diff.length > 0 : hasRawChanges;
 
   // Save/apply buttons require actual changes to be enabled.
   // Note: formUnsafe warns about unsupported schema paths but shouldn't block saving.
   const canSaveForm = Boolean(props.formValue) && !props.loading && Boolean(analysis.schema);
   const canSave =
-    props.connected &&
-    !props.saving &&
-    hasChanges &&
-    (props.formMode === "raw" ? true : canSaveForm);
+    props.connected && !props.saving && hasChanges && (formMode === "raw" ? true : canSaveForm);
   const canApply =
     props.connected &&
     !props.applying &&
     !props.updating &&
     hasChanges &&
-    (props.formMode === "raw" ? true : canSaveForm);
+    (formMode === "raw" ? true : canSaveForm);
   const canUpdate = props.connected && !props.applying && !props.updating;
 
   const showAppearanceOnRoot =
     includeVirtualSections &&
-    props.formMode === "form" &&
+    formMode === "form" &&
     props.activeSection === null &&
     Boolean(include?.has("__appearance__"));
 
   return html`
-    <div class="config-layout ${sidebarCollapsed ? "config-layout--sidebar-collapsed" : ""} ${props.activeSection ? "config-layout--section-active" : ""}">
-      <!-- Sidebar -->
-      <aside class="config-sidebar">
-        <div class="config-sidebar__header">
-          <div class="config-sidebar__title">Settings</div>
-          <div class="config-sidebar__header-right">
-            <button
-              class="config-sidebar__collapse-btn"
-              title="${sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}"
-              @click=${(e: Event) => {
-                sidebarCollapsed = !sidebarCollapsed;
-                const layout = (e.currentTarget as HTMLElement).closest(".config-layout");
-                if (layout) {
-                  layout.classList.toggle("config-layout--sidebar-collapsed", sidebarCollapsed);
-                }
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-                ${
-                  sidebarCollapsed
-                    ? html`
-                        <polyline points="9 18 15 12 9 6"></polyline>
-                      `
-                    : html`
-                        <polyline points="15 18 9 12 15 6"></polyline>
-                      `
-                }
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        ${
-          props.formMode === "form"
-            ? html`
-        <!-- Search -->
-        <div class="config-search">
-          <svg
-            class="config-search__icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="M21 21l-4.35-4.35"></path>
-          </svg>
-          <input
-            type="text"
-            class="config-search__input"
-            placeholder="Search settings..."
-            .value=${props.searchQuery}
-            @input=${(e: Event) => props.onSearchChange((e.target as HTMLInputElement).value)}
-          />
-          ${
-            props.searchQuery
-              ? html`
-                <button
-                  class="config-search__clear"
-                  @click=${() => props.onSearchChange("")}
-                >
-                  ×
-                </button>
-              `
-              : nothing
-          }
-        </div>
-
-        <!-- Section nav -->
-        <nav class="config-nav">
-          <button
-            class="config-nav__item ${props.activeSection === null ? "active" : ""}"
-            @click=${() => props.onSectionChange(null)}
-          >
-            <span class="config-nav__icon">${sidebarIcons.all}</span>
-            <span class="config-nav__label">${props.navRootLabel ?? "All Settings"}</span>
-          </button>
-          ${[...visibleCategories, ...(otherCategory ? [otherCategory] : [])].map(
-            (cat) => html`
-              <div class="config-nav__category ${collapsedCategories.has(cat.id) ? "collapsed" : ""}">
-                <button
-                  class="config-nav__category-header"
-                  @click=${(e: Event) => {
-                    if (collapsedCategories.has(cat.id)) {
-                      collapsedCategories.delete(cat.id);
-                    } else {
-                      collapsedCategories.add(cat.id);
-                    }
-                    const group = (e.currentTarget as HTMLElement).closest(".config-nav__category");
-                    group?.classList.toggle("collapsed", collapsedCategories.has(cat.id));
-                  }}
-                >
-                  <svg class="config-nav__category-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                  <span>${cat.label}</span>
-                </button>
-                <div class="config-nav__category-items">
-                  ${cat.sections.map(
-                    (section) => html`
-                      <button
-                        class="config-nav__item ${props.activeSection === section.key ? "active" : ""}"
-                        @click=${() => props.onSectionChange(section.key)}
-                      >
-                        <span class="config-nav__icon"
-                          >${getSectionIcon(section.key)}</span
-                        >
-                        <span class="config-nav__label">${section.label}</span>
-                      </button>
-                    `,
-                  )}
-                </div>
-              </div>
-            `,
-          )}
-        </nav>
-        `
-            : nothing
-        }
-
-        ${
-          props.version
-            ? html`
-            <div class="config-sidebar__version" title=${`v${props.version}`}>
-              ${
-                sidebarCollapsed
-                  ? html`<span class="config-sidebar__version-text">${props.version.replace(/^\d{4}\./, "")}</span>`
-                  : html`<span class="config-sidebar__version-text">v${props.version}</span>`
-              }
-            </div>
-          `
-            : nothing
-        }
-
-        <!-- Mode toggle at bottom -->
-        <div class="config-sidebar__footer">
-          <div class="config-mode-toggle">
-            <button
-              class="config-mode-toggle__btn ${props.formMode === "form" ? "active" : ""}"
-              ?disabled=${props.schemaLoading || !props.schema}
-              @click=${() => props.onFormModeChange("form")}
-            >
-              Form
-            </button>
-            <button
-              class="config-mode-toggle__btn ${props.formMode === "raw" ? "active" : ""}"
-              @click=${() => props.onFormModeChange("raw")}
-            >
-              Raw
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Main content -->
+    <div class="config-layout">
       <main class="config-main">
-        <!-- Mobile back button (visible only on mobile when a section is active) -->
-        <button
-          class="config-mobile-back"
-          @click=${() => props.onSectionChange(null)}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-          <span>Settings</span>
-        </button>
-        <!-- Action bar -->
         <div class="config-actions">
           <div class="config-actions__left">
             ${
               hasChanges
                 ? html`
-                  <span class="config-changes-badge"
-                    >${
-                      props.formMode === "raw"
-                        ? "Unsaved changes"
-                        : `${diff.length} unsaved change${diff.length !== 1 ? "s" : ""}`
-                    }</span
-                  >
-                `
+	                  <span class="config-changes-badge"
+	                    >${
+                        formMode === "raw"
+                          ? "Unsaved changes"
+                          : `${diff.length} unsaved change${diff.length !== 1 ? "s" : ""}`
+                      }</span
+	                  >
+	                `
                 : html`
                     <span class="config-status muted">No changes</span>
                   `
@@ -985,6 +782,96 @@ export function renderConfig(props: ConfigProps) {
           </div>
         </div>
 
+        <div class="config-top-tabs">
+          ${
+            formMode === "form"
+              ? html`
+                  <div class="config-search config-search--top">
+                    <svg
+                      class="config-search__icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="M21 21l-4.35-4.35"></path>
+                    </svg>
+                    <input
+                      type="text"
+                      class="config-search__input"
+                      placeholder="Search settings..."
+                      .value=${props.searchQuery}
+                      @input=${(e: Event) =>
+                        props.onSearchChange((e.target as HTMLInputElement).value)}
+                    />
+                    ${
+                      props.searchQuery
+                        ? html`
+                            <button
+                              class="config-search__clear"
+                              @click=${() => props.onSearchChange("")}
+                            >
+                              ×
+                            </button>
+                          `
+                        : nothing
+                    }
+                  </div>
+                `
+              : nothing
+          }
+
+          <div class="config-top-tabs__scroller" role="tablist" aria-label="Settings sections">
+            ${topTabs.map(
+              (tab) => html`
+                <button
+                  class="config-top-tabs__tab ${props.activeSection === tab.key ? "active" : ""}"
+                  role="tab"
+                  aria-selected=${props.activeSection === tab.key}
+                  @click=${() => props.onSectionChange(tab.key)}
+                  title=${tab.label}
+                >
+                  ${tab.label}
+                </button>
+              `,
+            )}
+          </div>
+
+          <div class="config-top-tabs__right">
+            ${
+              props.version
+                ? html`
+                    <span class="config-top-tabs__version" title=${`v${props.version}`}>
+                      v${props.version}
+                    </span>
+                  `
+                : nothing
+            }
+            ${
+              showModeToggle
+                ? html`
+                    <div class="config-mode-toggle">
+                      <button
+                        class="config-mode-toggle__btn ${formMode === "form" ? "active" : ""}"
+                        ?disabled=${props.schemaLoading || !props.schema}
+                        @click=${() => props.onFormModeChange("form")}
+                      >
+                        Form
+                      </button>
+                      <button
+                        class="config-mode-toggle__btn ${formMode === "raw" ? "active" : ""}"
+                        @click=${() => props.onFormModeChange("raw")}
+                      >
+                        Raw
+                      </button>
+                    </div>
+                  `
+                : nothing
+            }
+          </div>
+        </div>
+
         ${
           validity === "invalid" && !validityDismissed
             ? html`
@@ -1009,7 +896,7 @@ export function renderConfig(props: ConfigProps) {
 
         <!-- Diff panel (form mode only - raw mode doesn't have granular diff) -->
         ${
-          hasChanges && props.formMode === "form"
+          hasChanges && formMode === "form"
             ? html`
               <details class="config-diff">
                 <summary class="config-diff__summary">
@@ -1049,12 +936,12 @@ export function renderConfig(props: ConfigProps) {
             `
             : nothing
         }
-        ${
-          activeSectionMeta && props.formMode === "form"
-            ? html`
-              <div class="config-section-hero">
-                <div class="config-section-hero__icon">
-                  ${getSectionIcon(props.activeSection ?? "")}
+	        ${
+            activeSectionMeta && formMode === "form"
+              ? html`
+	              <div class="config-section-hero">
+	                <div class="config-section-hero__icon">
+	                  ${getSectionIcon(props.activeSection ?? "")}
                 </div>
                 <div class="config-section-hero__text">
                   <div class="config-section-hero__title">
@@ -1096,36 +983,8 @@ export function renderConfig(props: ConfigProps) {
                 }
               </div>
             `
-            : nothing
-        }
-        ${
-          allowSubnav
-            ? html`
-              <div class="config-subnav">
-                <button
-                  class="config-subnav__item ${effectiveSubsection === null ? "active" : ""}"
-                  @click=${() => props.onSubsectionChange(ALL_SUBSECTION)}
-                >
-                  All
-                </button>
-                ${subsections.map(
-                  (entry) => html`
-                    <button
-                      class="config-subnav__item ${
-                        effectiveSubsection === entry.key ? "active" : ""
-                      }"
-                      title=${entry.description || entry.label}
-                      @click=${() => props.onSubsectionChange(entry.key)}
-                    >
-                      ${entry.label}
-                    </button>
-                  `,
-                )}
-              </div>
-            `
-            : nothing
-        }
-
+              : nothing
+          }
         <!-- Form content -->
         <div class="config-content ${props.activeSection === "env" ? "config-env-values--blurred" : ""}">
           ${
@@ -1133,7 +992,7 @@ export function renderConfig(props: ConfigProps) {
               ? includeVirtualSections
                 ? renderAppearanceSection(props)
                 : nothing
-              : props.formMode === "form"
+              : formMode === "form"
                 ? html`
                 ${showAppearanceOnRoot ? renderAppearanceSection(props) : nothing}
                 ${

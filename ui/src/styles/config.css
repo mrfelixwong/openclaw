@@ -5,7 +5,7 @@
 /* Layout Container */
 .config-layout {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 0;
   height: calc(100vh - var(--shell-topbar-height, 52px));
   margin: -12px -14px -24px;
@@ -346,6 +346,102 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.config-top-tabs {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 22px;
+  background: var(--bg-accent);
+  border-bottom: 1px solid var(--border);
+  min-height: 56px;
+}
+
+.config-top-tabs__scroller {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.config-top-tabs__scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.config-top-tabs__tab {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 2px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition:
+    color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+}
+
+.config-top-tabs__tab:hover {
+  color: var(--text);
+}
+
+.config-top-tabs__tab.active {
+  color: var(--text-strong);
+  border-bottom-color: var(--accent);
+}
+
+.config-top-tabs__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.config-top-tabs__version {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  font-family: var(--mono);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.config-search--top {
+  padding: 0;
+  min-height: 0;
+  border-bottom: none;
+  width: min(360px, 42vw);
+  flex: 0 0 auto;
+}
+
+.config-search--top .config-search__icon {
+  left: 14px;
+}
+
+.config-search--top .config-search__input {
+  padding: 9px 34px 9px 38px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: text;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.config-search--top .config-search__input:focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: var(--focus-ring);
+}
+
+.config-search--top .config-search__clear {
+  right: 10px;
 }
 
 .config-changes-badge {
@@ -1426,36 +1522,15 @@
     grid-template-columns: 1fr;
   }
 
-  .config-sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
+  .config-top-tabs {
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    gap: 10px;
+    min-height: auto;
   }
 
-  .config-sidebar__header {
-    padding: 14px 16px;
-  }
-
-  .config-nav {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 6px;
-    padding: 10px 14px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .config-nav__item {
-    flex: 0 0 auto;
-    padding: 9px 14px;
-    white-space: nowrap;
-  }
-
-  .config-nav__label {
-    display: inline;
-  }
-
-  .config-sidebar__footer {
-    display: none;
+  .config-search--top {
+    width: 100%;
   }
 
   .config-actions {
@@ -1500,36 +1575,6 @@
 
   .cfg-map__item-remove {
     justify-self: end;
-  }
-
-  /* Drill-down: hide sidebar when a section is selected */
-  .config-layout--section-active .config-sidebar {
-    display: none;
-  }
-
-  /* Drill-down: show mobile back button */
-  .config-layout--section-active .config-mobile-back {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
-    border: none;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-accent);
-    color: var(--accent);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-  }
-
-  .config-layout--section-active .config-mobile-back svg {
-    flex-shrink: 0;
-  }
-
-  .config-layout--section-active .config-mobile-back:hover {
-    background: var(--bg-hover);
   }
 }
 
