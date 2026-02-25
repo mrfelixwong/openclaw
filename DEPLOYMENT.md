@@ -1,6 +1,6 @@
 # OpenClaw Deployment Progress (Fly.io + Telegram + OpenAI)
 
-## Status: ✅ COMPLETE (Multi-agent Telegram working, WhatsApp pending)
+## Status: ✅ COMPLETE (Multi-agent Telegram + Memory Search working, WhatsApp pending)
 
 ---
 
@@ -14,6 +14,9 @@
   - `@sep_baba_bot` (Baba Shiv) — ✅ agent `baba`, workspace `/data/workspace-baba`
   - `@sep_barnett_bot` (Bill Barnett) — ✅ agent `barnett`, workspace `/data/workspace-barnett`
 - **Allowed Telegram users**: `5422228671`, `8527086317`
+- **Memory search**: ✅ enabled (OpenAI embeddings, session history recall)
+- **CI/CD**: GitHub Action auto-deploys on push to `main` (fly.toml, Dockerfile, src/\*\*)
+- **Repo**: [`mrfelixwong/openclaw`](https://github.com/mrfelixwong/openclaw) (fork of openclaw/openclaw)
 - **WhatsApp**: ⏳ pending (datacenter IP blocked)
 - **Cost**: ~$10-15/month
 
@@ -56,12 +59,22 @@ fly deploy
 
 ### ✅ 6. Config written to /data/openclaw.json
 
-Current config (as of 2026-02-23):
+Current config (as of 2026-02-25):
 
 ```json
 {
   "agents": {
-    "defaults": { "model": { "primary": "openai/gpt-4o" } },
+    "defaults": {
+      "model": { "primary": "openai/gpt-4o" },
+      "memorySearch": {
+        "provider": "openai",
+        "sources": ["memory", "sessions"],
+        "experimental": { "sessionMemory": true }
+      },
+      "tools": {
+        "alsoAllow": ["memory_search", "memory_get"]
+      }
+    },
     "list": [
       { "id": "barnett", "workspace": "/data/workspace-barnett" },
       { "id": "baba", "workspace": "/data/workspace-baba" }
@@ -71,6 +84,11 @@ Current config (as of 2026-02-23):
     { "agentId": "barnett", "match": { "channel": "telegram", "accountId": "barnett" } },
     { "agentId": "baba", "match": { "channel": "telegram", "accountId": "baba" } }
   ],
+  "gateway": {
+    "controlUi": {
+      "allowedOrigins": ["https://openclaw-fw.fly.dev"]
+    }
+  },
   "channels": {
     "whatsapp": {
       "dmPolicy": "allowlist",
@@ -83,13 +101,13 @@ Current config (as of 2026-02-23):
           "botToken": "<redacted>",
           "dmPolicy": "allowlist",
           "allowFrom": [5422228671, 8527086317],
-          "streamMode": "partial"
+          "streaming": "partial"
         },
         "barnett": {
           "botToken": "<redacted>",
           "dmPolicy": "allowlist",
           "allowFrom": [5422228671, 8527086317],
-          "streamMode": "partial"
+          "streaming": "partial"
         }
       }
     }
@@ -115,6 +133,22 @@ Manually wrote approved device to `/data/devices/paired.json` (CLI couldn't conn
 - Both bots receive messages, route to correct agents, and respond via GPT-4o
 - Agent workspaces: `/data/workspace-barnett/`, `/data/workspace-baba/`
 - Session files: `/data/agents/{barnett,baba}/sessions/`
+
+### ✅ 10. Memory search enabled (2026-02-25)
+
+- **Backend**: OpenAI embeddings (`text-embedding-3-small`) via existing `OPENAI_API_KEY`
+- **Sources**: workspace `MEMORY.md` files + session transcripts (experimental `sessionMemory`)
+- **Tools**: `memory_search` and `memory_get` added via `alsoAllow` (not in default `messaging` tool profile)
+- **Index**: SQLite at `/data/memory/{agentId}.sqlite`
+- **Workspace files**: Created `MEMORY.md` in both `/data/workspace-baba/` and `/data/workspace-barnett/`
+- **Gateway fix**: Added `gateway.controlUi.allowedOrigins` (required by newer upstream builds for non-loopback `--bind lan`)
+
+### ✅ 11. GitHub fork + CI/CD (2026-02-25)
+
+- Forked `openclaw/openclaw` → [`mrfelixwong/openclaw`](https://github.com/mrfelixwong/openclaw)
+- Remotes: `origin` = fork, `upstream` = openclaw/openclaw
+- GitHub Action (`.github/workflows/fly-deploy.yml`): auto-deploys on push to `main` when `fly.toml`, `Dockerfile`, or `src/**` change
+- `FLY_API_TOKEN` secret set on the GitHub repo (deploy-scoped token for `openclaw-fw`)
 
 ### Debugging notes (2026-02-23)
 
@@ -161,6 +195,9 @@ fly machine restart 78175e1a03d148 -a openclaw-fw --skip-health-checks
 | gateway.port in config breaks binding | Don't set `port` in config JSON — use CLI flag `--port 3000` only                                                       |
 | No `sendMessage ok` in fly logs       | Expected with `streamMode: "partial"` — delivery uses draft-stream editMessageText path which doesn't log to fly stdout |
 | WhatsApp health-monitor restart loop  | Expected — datacenter IP blocked by WhatsApp, does not affect Telegram                                                  |
+| Gateway fails: `allowedOrigins`       | Newer upstream builds require `gateway.controlUi.allowedOrigins` for non-loopback bind. Add to openclaw.json.           |
+| memory_search not called by agent     | Tool is only in `coding` profile. Add `tools.alsoAllow: ["memory_search", "memory_get"]` to agent defaults.             |
+| OpenAI rate limit on startup          | Session memory indexing + embedding calls can spike on cold start. Wait 1 min or use `gpt-4o-mini` to reduce pressure.  |
 
 ## Next: Stanford GSB Demo Prep
 
