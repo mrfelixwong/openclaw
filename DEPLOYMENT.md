@@ -157,6 +157,41 @@ Manually wrote approved device to `/data/devices/paired.json` (CLI couldn't conn
 
 ---
 
+## How Changes Work (Two-Tier Config)
+
+There are two types of config, managed differently:
+
+### Tier 1: Repo-tracked (auto-deployed via CI/CD)
+
+Files in the git repo that trigger auto-deploy on push to `main`:
+
+- `fly.toml` — Fly.io machine config (VM size, env vars, health checks)
+- `Dockerfile` — build instructions
+- `src/**` — application source code
+- `.github/workflows/fly-deploy.yml` — the CI/CD pipeline itself
+
+**Workflow**: edit locally → `git commit` → `git push origin main` → GitHub Action deploys to Fly.io automatically.
+
+### Tier 2: Runtime config (managed via SSH)
+
+Files on the Fly.io VM's persistent volume (`/data/`). Not in the repo because they contain secrets (bot tokens):
+
+- `/data/openclaw.json` — agent config, bindings, channel tokens, memory search, tool policies
+- `/data/workspace-{baba,barnett}/MEMORY.md` — agent memory files
+- `/data/workspace-{baba,barnett}/SOUL.md` — agent persona/identity
+- `/data/agents/{baba,barnett}/sessions/` — conversation transcripts
+- `/data/memory/{agentId}.sqlite` — memory search index
+
+**Workflow**: edit via `fly ssh console` → restart with `fly machine restart`. See config update command:
+
+```bash
+# Write config (use base64 to avoid quoting issues)
+cat openclaw.json | base64 | fly ssh console -a openclaw-fw -C "sh -c 'base64 -d > /data/openclaw.json'"
+fly machine restart 78175e1a03d148 -a openclaw-fw --skip-health-checks
+```
+
+---
+
 ## Pending
 
 ### ⏳ WhatsApp — blocked by datacenter IP issue
